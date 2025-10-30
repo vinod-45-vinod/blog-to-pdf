@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
   # STAGE 1: BUILD
@@ -14,10 +14,10 @@ jobs:
     
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
         cache: 'pip'
@@ -44,10 +44,10 @@ jobs:
     
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
         
@@ -63,7 +63,7 @@ jobs:
         pytest test_main.py --cov=. --cov-report=xml --cov-report=html --cov-report=json -v
         
     - name: Upload Pytest Coverage
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pytest-coverage
         path: python_service/htmlcov/
@@ -76,10 +76,10 @@ jobs:
     
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
         
@@ -128,7 +128,7 @@ jobs:
         echo "Quality checks completed at $(date)" > quality-reports/report-timestamp.txt
         
     - name: Upload Quality Reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: quality-reports
         path: quality-reports/
@@ -142,17 +142,17 @@ jobs:
     
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Download Pytest Coverage
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: pytest-coverage
         path: artifacts/coverage/pytest
       continue-on-error: true
       
     - name: Download Quality Reports
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: quality-reports
         path: artifacts/quality
@@ -182,14 +182,14 @@ jobs:
         zip -r source-code-clean.zip source-clean/
         
     - name: Upload CI/CD Reports Archive
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ci-cd-reports
         path: ci-cd-reports.zip
         retention-days: 30
         
     - name: Upload Source Code Clean Archive
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: source-code-clean
         path: source-code-clean.zip
