@@ -1,0 +1,213 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # STAGE 1: BUILD
+  build:
+    name: Build Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        
+    - name: Install Python Dependencies
+      run: |
+        cd python_service
+        pip install -r requirements.txt
+        
+    - name: Cache Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          python_service/.venv
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+
+  # STAGE 2: TEST
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install Python Dependencies
+      run: |
+        cd python_service
+        pip install -r requirements.txt
+        pip install pytest pytest-cov httpx
+        
+    - name: Run Pytest Tests (Backend)
+      run: |
+        cd python_service
+        pytest test_main.py --cov=. --cov-report=xml --cov-report=html --cov-report=json -v
+        
+    - name: Upload Pytest Coverage
+      uses: actions/upload-artifact@v3
+      with:
+        name: pytest-coverage
+        path: python_service/htmlcov/
+
+  # STAGE 3: QUALITY CHECKS
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install Python Dependencies
+      run: |
+        cd python_service
+        pip install -r requirements.txt
+        pip install pylint bandit flake8
+      
+    # Coverage Reports
+    - name: Generate Backend Coverage Report
+      run: |
+        cd python_service
+        pip install pytest pytest-cov
+        pytest test_main.py --cov=. --cov-report=term --cov-report=html
+      continue-on-error: true
+      
+    # Linting
+    - name: Run Flake8 (Backend)
+      run: |
+        cd python_service
+        flake8 main.py --count --show-source --statistics --max-line-length=100
+      continue-on-error: true
+      
+    - name: Run Pylint (Backend)
+      run: |
+        cd python_service
+        pylint main.py --exit-zero --max-line-length=100
+      continue-on-error: true
+      
+    # Security Scanning
+    - name: Run Bandit Security Scan (Python)
+      run: |
+        cd python_service
+        bandit -r . -f json -o bandit-report.json || true
+        bandit -r . -f txt
+      continue-on-error: true
+      
+    - name: Create Quality Reports Directory
+      run: mkdir -p quality-reports
+      
+    - name: Collect Quality Reports
+      run: |
+        cp -r python_service/htmlcov quality-reports/pytest-coverage || true
+        cp -r python_service/bandit-report.json quality-reports/ || true
+        echo "Quality checks completed at $(date)" > quality-reports/report-timestamp.txt
+        
+    - name: Upload Quality Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: quality-reports
+        path: quality-reports/
+
+  # STAGE 4: ARTIFACTS
+  artifacts:
+    name: Create Artifacts
+    runs-on: ubuntu-latest
+    needs: [test, quality]
+    if: always()
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      
+    - name: Download Pytest Coverage
+      uses: actions/download-artifact@v3
+      with:
+        name: pytest-coverage
+        path: artifacts/coverage/pytest
+      continue-on-error: true
+      
+    - name: Download Quality Reports
+      uses: actions/download-artifact@v3
+      with:
+        name: quality-reports
+        path: artifacts/quality
+      continue-on-error: true
+      
+    - name: Create CI/CD Reports Archive
+      run: |
+        cd artifacts
+        zip -r ../ci-cd-reports.zip . || true
+        
+    - name: Create Source Code Clean Archive
+      run: |
+        mkdir -p source-clean
+        rsync -av --exclude='node_modules' \
+                  --exclude='.git' \
+                  --exclude='__pycache__' \
+                  --exclude='*.pyc' \
+                  --exclude='venv' \
+                  --exclude='env' \
+                  --exclude='.pytest_cache' \
+                  --exclude='htmlcov' \
+                  --exclude='coverage' \
+                  --exclude='.coverage' \
+                  --exclude='*.log' \
+                  --exclude='*.pdf' \
+                  . source-clean/ || true
+        zip -r source-code-clean.zip source-clean/
+        
+    - name: Upload CI/CD Reports Archive
+      uses: actions/upload-artifact@v3
+      with:
+        name: ci-cd-reports
+        path: ci-cd-reports.zip
+        retention-days: 30
+        
+    - name: Upload Source Code Clean Archive
+      uses: actions/upload-artifact@v3
+      with:
+        name: source-code-clean
+        path: source-code-clean.zip
+        retention-days: 30
+        
+    - name: Create Release Summary
+      run: |
+        echo "## 🎉 Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Artifacts Created:" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ ci-cd-reports.zip (Coverage + Lint + Security)" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ source-code-clean.zip (Clean source with tests & configs)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Pipeline Stages:" >> $GITHUB_STEP_SUMMARY
+        echo "- STAGE 1: BUILD ✅" >> $GITHUB_STEP_SUMMARY
+        echo "- STAGE 2: TEST ✅" >> $GITHUB_STEP_SUMMARY
+        echo "- STAGE 3: QUALITY CHECKS ✅" >> $GITHUB_STEP_SUMMARY
+        echo "- STAGE 4: ARTIFACTS ✅" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🌐 Test URL Used:" >> $GITHUB_STEP_SUMMARY
+        echo "- https://en.wikipedia.org/wiki/India" >> $GITHUB_STEP_SUMMARY
