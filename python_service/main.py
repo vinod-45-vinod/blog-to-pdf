@@ -1,3 +1,10 @@
+import re
+import hashlib
+import time
+import io
+import base64
+from urllib.parse import urljoin
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -5,13 +12,6 @@ from pydantic import BaseModel
 import requests
 from bs4 import BeautifulSoup
 from xhtml2pdf import pisa
-import re
-import hashlib
-import time
-from typing import Optional
-from urllib.parse import urljoin, urlparse
-import io
-import base64
 
 app = FastAPI(title="Blog-to-PDF Converter API")
 

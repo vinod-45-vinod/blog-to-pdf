@@ -78,32 +78,51 @@ class TestParseArticleTextAndHeadings:
 class TestPreserveInlineImages:
     """Tests for Story 2.3: Preserve Inline Images"""
     
-    def test_preserve_images_converts_relative_urls(self):
-        """Test that relative image URLs are converted to absolute"""
+    @patch('main.requests.get')
+    def test_preserve_images_converts_relative_urls(self, mock_get):
+        """Test that relative image URLs are converted to base64 or removed"""
+        # Mock failed image fetch - image will be removed
+        mock_get.side_effect = requests.RequestException("Failed")
+        
         html = '<img src="/images/india-flag.jpg">'
         soup = BeautifulSoup(html, 'html.parser')
         result = preserve_inline_images(soup, TEST_URL)
         
+        # Image should be removed if fetch fails
         img = result.find('img')
-        assert img['src'].startswith("https://en.wikipedia.org/")
+        assert img is None
     
-    def test_preserve_images_keeps_absolute_urls(self):
-        """Test that absolute URLs are preserved"""
+    @patch('main.requests.get')
+    def test_preserve_images_keeps_absolute_urls(self, mock_get):
+        """Test that absolute URLs are converted to base64"""
+        # Mock successful image fetch
+        mock_response = Mock()
+        mock_response.content = b'fake_image_data'
+        mock_response.headers = {'content-type': 'image/jpeg'}
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+        
         html = '<img src="https://upload.wikimedia.org/wikipedia/commons/india.jpg">'
         soup = BeautifulSoup(html, 'html.parser')
         result = preserve_inline_images(soup, TEST_URL)
         
         img = result.find('img')
-        assert img['src'].startswith("https://upload.wikimedia.org/")
+        assert img is not None
+        assert 'data:image' in img['src']
     
-    def test_preserve_images_handles_data_src(self):
+    @patch('main.requests.get')
+    def test_preserve_images_handles_data_src(self, mock_get):
         """Test that lazy-loaded images (data-src) are handled"""
+        # Mock failed fetch
+        mock_get.side_effect = requests.RequestException("Failed")
+        
         html = '<img data-src="/lazy-image.jpg">'
         soup = BeautifulSoup(html, 'html.parser')
         result = preserve_inline_images(soup, TEST_URL)
         
+        # Image should be removed if no valid src
         img = result.find('img')
-        assert img['src'].startswith("https://")
+        assert img is None
 
 
 class TestRemoveAdsAndBanners:
@@ -175,7 +194,7 @@ class TestIntegratePDFLibrary:
     def test_integrate_pdf_library_returns_bytes(self):
         """Test that PDF generation returns bytes"""
         html = "<h1>India</h1><p>India is a country in South Asia.</p>"
-        result = integrate_pdf_library(html, "modern")
+        result = integrate_pdf_library(html)
         
         assert isinstance(result, bytes)
         assert len(result) > 0
@@ -183,17 +202,17 @@ class TestIntegratePDFLibrary:
         assert result[:4] == b'%PDF'
     
     def test_integrate_pdf_library_classic_style(self):
-        """Test PDF generation with classic style"""
+        """Test PDF generation (classic style removed, using modern only)"""
         html = "<h1>India</h1>"
-        result = integrate_pdf_library(html, "classic")
+        result = integrate_pdf_library(html)
         
         assert isinstance(result, bytes)
         assert len(result) > 0
     
     def test_integrate_pdf_library_minimal_style(self):
-        """Test PDF generation with minimal style"""
+        """Test PDF generation (minimal style removed, using modern only)"""
         html = "<h1>India</h1>"
-        result = integrate_pdf_library(html, "minimal")
+        result = integrate_pdf_library(html)
         
         assert isinstance(result, bytes)
         assert len(result) > 0
